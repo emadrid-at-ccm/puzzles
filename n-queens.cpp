@@ -17,6 +17,47 @@ constexpr auto Max = 16;
 
 using Solution = std::array<int8_t, Max>;
 
+std::vector<long> solutions;
+
+void solve(
+    long solution, long availableMask, long position,
+    long columns, long diagonals1, long diagonals2
+) {
+    auto available = ~columns & availableMask;
+        // ones indicate column position candidate
+    auto solShifted = solution << 4;
+    auto pminusone = position - 1;
+    while(available) {
+        auto hole = 63 - __builtin_clzll(available);
+        auto holeBit = 1l << hole;
+        available &= ~holeBit;
+        long podiag1 = 32 - hole + position;
+        long diag1bit = 1l << podiag1;
+        if(diag1bit & diagonals1) { continue; }
+        long podiag2 = position + hole;
+        long diag2bit = 1l << podiag2;
+        if(diag2bit & diagonals2) { continue; }
+
+        // survived all the checks
+        if(0 == position) {
+            solutions.push_back(solShifted | hole); continue;
+        }
+        // recurr
+        solve(
+            solShifted | hole,
+            availableMask,
+            pminusone,
+            columns | holeBit,
+            diagonals1 | diag1bit,
+            diagonals2 | diag2bit
+        );
+    }
+}
+
+void solve(int n) {
+    solve(0, (1 << n) - 1, n - 1, 0, 0, 0);
+}
+
 struct Solver {
     Solution m_positions;
     int8_t m_n, m_current = 0;
@@ -83,6 +124,15 @@ int main(int argc, const char *argv[]) {
         std::cerr << "Lacks number of queens" << std::endl;
         return 1;
     }
+
+    if(std::string("--bits") == argv[1]) {
+        auto n = std::stoi(argv[2]);
+        auto bmark = benchmark((void(*)(int))solve, n);
+        std::cout << "N-Queens Found " << solutions.size() << " Solutions in " <<
+            std::fixed << std::setprecision(6) << bmark/1000000.0 << "s on a " <<
+            n << 'x' << n << " board" << std::endl;
+        return 0;
+    }
     auto n = std::stoi(argv[1]);
     if(n < 1 && 16 < n) {
         std::cerr << "Invalid number of queens " << n << std::endl;
@@ -98,3 +148,31 @@ int main(int argc, const char *argv[]) {
         n << 'x' << n << " board" << std::endl;
     return 0;
 }
+
+constexpr int trypos(
+    int work, int col, int row, int rows, int diags1, int diags2,
+    int rowbit, int diag1bit, int diag2bit);
+
+constexpr int place(
+    int result, int work, int col, int row, int rows, int diags1, int diags2)
+{
+    return result != 0 ? result
+        : col == 8 ? work
+        : row == 8 ? 0
+        : trypos(work, col, row, rows, diags1, diags2,
+                 1 << row, 1 << (7 + col - row), 1 << (14 - col - row));
+}
+
+constexpr int trypos(
+    int work, int col, int row, int rows, int diags1, int diags2,
+    int rowbit, int diag1bit, int diag2bit)
+{
+    return !(rows & rowbit) && !(diags1 & diag1bit) && !(diags2 & diag2bit)
+        ? place(
+            place(0, work*10 + 8-row, col + 1, 0,
+                  rows | rowbit, diags1 | diag1bit, diags2 | diag2bit),
+            work, col, row + 1, rows, diags1, diags2)
+        : place(0, work, col, row + 1, rows, diags1, diags2);
+}
+
+int places = place(0, 0, 0, 0, 0, 0, 0);
